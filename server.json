@@ -1,0 +1,18 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schemas/server.json",
+  "name": "honest-gmail-mcp",
+  "description": "Local MCP server for Gmail — send, search, label emails with your Google account. No cloud middle.",
+  "repository": {
+    "url": "https://github.com/bartosz-kuc/honest-gmail-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registry_name": "pypi",
+      "name": "honest-gmail-mcp",
+      "version": "0.1.0",
+      "runtime_hint": "uvx"
+    }
+  ]
+}
