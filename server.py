@@ -80,7 +80,13 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="send_message",
-            description="Send an email. Optionally attach local files by absolute path.",
+            description=(
+                "Send an email. Optionally attach local files by absolute path. "
+                "To reply inside an existing conversation, pass reply_to_message_id "
+                "(the id of the message you are replying to): the mail is threaded "
+                "properly (In-Reply-To/References + Gmail threadId), and 'to'/'subject' "
+                "default to the original sender and 'Re: <original subject>'."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -89,18 +95,22 @@ async def list_tools() -> list[Tool]:
                     "body": {"type": "string"},
                     "cc": {"type": "string"},
                     "bcc": {"type": "string"},
+                    "reply_to_message_id": {
+                        "type": "string",
+                        "description": "Id of the message to reply to. Makes 'to' and 'subject' optional.",
+                    },
                     "attachments": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Absolute paths of files to attach.",
                     },
                 },
-                "required": ["to", "subject", "body"],
+                "required": ["body"],
             },
         ),
         Tool(
             name="create_draft",
-            description="Create a draft (same fields as send_message). Does not send.",
+            description="Create a draft (same fields as send_message, including reply_to_message_id). Does not send.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -109,9 +119,13 @@ async def list_tools() -> list[Tool]:
                     "body": {"type": "string"},
                     "cc": {"type": "string"},
                     "bcc": {"type": "string"},
+                    "reply_to_message_id": {
+                        "type": "string",
+                        "description": "Id of the message to reply to. Makes 'to' and 'subject' optional.",
+                    },
                     "attachments": {"type": "array", "items": {"type": "string"}},
                 },
-                "required": ["to", "subject", "body"],
+                "required": ["body"],
             },
         ),
         Tool(
@@ -135,7 +149,7 @@ async def list_tools() -> list[Tool]:
     ]
 
 
-def _build_mime(to, subject, body, cc="", bcc="", attachments=None):
+def _build_mime(to, subject, body, cc="", bcc="", attachments=None, extra_headers=None):
     if attachments:
         msg = MIMEMultipart()
         msg.attach(MIMEText(body, "plain", "utf-8"))
@@ -157,7 +171,61 @@ def _build_mime(to, subject, body, cc="", bcc="", attachments=None):
         msg["Cc"] = cc
     if bcc:
         msg["Bcc"] = bcc
+    for key, value in (extra_headers or {}).items():
+        msg[key] = value
     return {"raw": base64.urlsafe_b64encode(msg.as_bytes()).decode()}
+
+
+def _reply_context(svc, message_id):
+    """Threading info for a reply: headers, thread id, and to/subject defaults."""
+    orig = svc.users().messages().get(
+        userId="me",
+        id=message_id,
+        format="metadata",
+        # Both spellings requested — providers vary between Message-ID and Message-Id.
+        metadataHeaders=["Message-ID", "Message-Id", "References", "Subject", "From", "Reply-To"],
+    ).execute()
+    headers = {h["name"].lower(): h["value"] for h in orig.get("payload", {}).get("headers", [])}
+    orig_msg_id = headers.get("message-id", "")
+    references = " ".join(x for x in (headers.get("references", ""), orig_msg_id) if x)
+    subject = headers.get("subject", "")
+    if subject and not subject.lower().startswith("re:"):
+        subject = f"Re: {subject}"
+    extra_headers = {}
+    if orig_msg_id:
+        extra_headers["In-Reply-To"] = orig_msg_id
+    if references:
+        extra_headers["References"] = references
+    return {
+        "thread_id": orig["threadId"],
+        "extra_headers": extra_headers,
+        "default_to": headers.get("reply-to") or headers.get("from", ""),
+        "default_subject": subject,
+    }
+
+
+def _prepare_outgoing(svc, arguments):
+    """Build the Gmail API message body for send/draft, resolving reply threading."""
+    to = arguments.get("to", "")
+    subject = arguments.get("subject", "")
+    extra_headers = None
+    thread_id = None
+    if arguments.get("reply_to_message_id"):
+        ctx = _reply_context(svc, arguments["reply_to_message_id"])
+        thread_id = ctx["thread_id"]
+        extra_headers = ctx["extra_headers"]
+        to = to or ctx["default_to"]
+        subject = subject or ctx["default_subject"]
+    if not to or not subject:
+        raise ValueError("'to' and 'subject' are required when reply_to_message_id is not given")
+    message = _build_mime(
+        to, subject, arguments["body"],
+        arguments.get("cc", ""), arguments.get("bcc", ""),
+        arguments.get("attachments"), extra_headers,
+    )
+    if thread_id:
+        message["threadId"] = thread_id
+    return message
 
 
 def _decode_body(payload: dict) -> str:
@@ -216,25 +284,17 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         }, ensure_ascii=False, indent=2))]
 
     if name == "send_message":
-        raw = _build_mime(
-            arguments["to"], arguments["subject"], arguments["body"],
-            arguments.get("cc", ""), arguments.get("bcc", ""),
-            arguments.get("attachments"),
-        )
+        raw = _prepare_outgoing(svc, arguments)
         sent = svc.users().messages().send(userId="me", body=raw).execute()
         return [TextContent(type="text", text=json.dumps(
             {"id": sent["id"], "threadId": sent["threadId"]}
         ))]
 
     if name == "create_draft":
-        raw = _build_mime(
-            arguments["to"], arguments["subject"], arguments["body"],
-            arguments.get("cc", ""), arguments.get("bcc", ""),
-            arguments.get("attachments"),
-        )
+        raw = _prepare_outgoing(svc, arguments)
         draft = svc.users().drafts().create(userId="me", body={"message": raw}).execute()
         return [TextContent(type="text", text=json.dumps(
-            {"draft_id": draft["id"], "message_id": draft["message"]["id"]}
+            {"draft_id": draft["id"], "message_id": draft["message"]["id"], "threadId": draft["message"].get("threadId")}
         ))]
 
     if name == "list_labels":

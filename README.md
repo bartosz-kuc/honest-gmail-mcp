@@ -10,7 +10,7 @@ This project takes a different path: it runs on **your** machine, authenticates 
 
 **Data flow:** `You ↔ this server (on your Mac) ↔ Google Gmail API`. That's the whole path. No hosted service. No proxy. No third-party access to your inbox.
 
-**You can read the entire server** — one file, ~240 lines of Python — and confirm for yourself.
+**You can read the entire server** — one file, ~330 lines of Python — and confirm for yourself.
 
 ## Features
 
@@ -18,8 +18,8 @@ Six tools exposed over MCP:
 
 - `search_messages` — Gmail search syntax (e.g. `from:foo@bar is:unread newer_than:7d`)
 - `get_message` — full headers + decoded text/plain body
-- `send_message` — with optional local file attachments (this is a feature the official connector lacks)
-- `create_draft` — same fields as send, does not send
+- `send_message` — with optional local file attachments (this is a feature the official connector lacks), and proper in-thread replies via `reply_to_message_id` (sets `In-Reply-To`/`References` and Gmail `threadId`; `to`/`subject` default to the original sender and `Re: <subject>`)
+- `create_draft` — same fields as send (including replies), does not send
 - `list_labels` — all labels with ids
 - `modify_labels` — add/remove labels on a message
 
