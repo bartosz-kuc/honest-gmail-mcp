@@ -33,8 +33,11 @@ from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
 HERE = Path(__file__).parent
-CRED_PATH = HERE / "credentials.json"
-TOKEN_PATH = HERE / "token.json"
+# Paths are env-configurable so one codebase can serve multiple Google accounts:
+# run a second MCP server instance with GMAIL_TOKEN_PATH pointing at another
+# account's token. credentials.json (the OAuth client) is shared across accounts.
+CRED_PATH = Path(os.environ.get("GMAIL_CREDENTIALS_PATH", str(HERE / "credentials.json")))
+TOKEN_PATH = Path(os.environ.get("GMAIL_TOKEN_PATH", str(HERE / "token.json")))
 
 
 def get_service():
@@ -51,7 +54,7 @@ def get_service():
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
 
-server = Server("gmail-personal")
+server = Server(os.environ.get("GMAIL_SERVER_NAME", "gmail-personal"))
 
 
 async def _list_tools() -> list[Tool]:
