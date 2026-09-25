@@ -1,8 +1,15 @@
-"""honest-gmail-mcp — minimal Gmail MCP server for a single Google account.
+"""honest-gmail-mcp — minimal Gmail MCP server, one Google account per instance.
 
 Exposes 6 tools over MCP stdio: search_messages, get_message, send_message,
-create_draft, list_labels, modify_labels. Refresh token stored locally in
-token.json next to this file. Attachments accepted as absolute local paths.
+create_draft, list_labels, modify_labels. Attachments accepted as absolute
+local paths. The refresh token is stored locally in a token file.
+
+Multiple accounts: run one server instance per account, configured by env vars:
+  GMAIL_TOKEN_PATH        token file (default: token.json next to this file)
+  GMAIL_CREDENTIALS_PATH  OAuth client JSON (default: credentials.json next to
+                          this file); can be shared by all accounts
+  GMAIL_SERVER_NAME       MCP server name (default: gmail-personal)
+authorize.py (repo checkout only) mints a token file per account.
 
 Author: Bartosz Kuć <firma@bartosza.pl>
 Repo:   https://github.com/bartosz-kuc/honest-gmail-mcp
