@@ -148,7 +148,7 @@ The package contains only the server module (command `honest-gmail-mcp`); `autho
 
 If the token file does not exist yet, the server opens the browser consent flow on its first tool call and writes the token to `GMAIL_TOKEN_PATH`.
 
-Release 0.1.0 predates these variables and the mcp 2.x API; if it is still the latest version on PyPI, install from source as above.
+These variables and the mcp 2.x API need version 0.2.0 or newer; 0.1.0 does not read them and fails to start with mcp 2.x.
 
 ## Data flow (in detail)
 
