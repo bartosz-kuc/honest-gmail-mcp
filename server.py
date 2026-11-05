@@ -19,8 +19,8 @@ License: MIT
 import asyncio
 import base64
 import json
-import os
 import mimetypes
+import os
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any

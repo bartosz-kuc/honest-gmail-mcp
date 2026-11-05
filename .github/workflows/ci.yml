@@ -43,6 +43,9 @@ jobs:
           print(f"OK — server.name = {m.server.name}")
           PY
 
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
   lint:
     name: Ruff lint
     runs-on: ubuntu-latest
