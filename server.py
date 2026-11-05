@@ -20,10 +20,8 @@ import asyncio
 import base64
 import json
 import os
-from email import encoders
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import mimetypes
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
@@ -159,21 +157,11 @@ async def _list_tools() -> list[Tool]:
 
 
 def _build_mime(to, subject, body, cc="", bcc="", attachments=None, extra_headers=None):
-    if attachments:
-        msg = MIMEMultipart()
-        msg.attach(MIMEText(body, "plain", "utf-8"))
-        for path in attachments:
-            with open(path, "rb") as f:
-                part = MIMEBase("application", "octet-stream")
-                part.set_payload(f.read())
-            encoders.encode_base64(part)
-            part.add_header(
-                "Content-Disposition",
-                f'attachment; filename="{os.path.basename(path)}"',
-            )
-            msg.attach(part)
-    else:
-        msg = MIMEText(body, "plain", "utf-8")
+    # EmailMessage (policy.default) encodes headers per RFC 5322/2047/2231: non-ASCII display
+    # names stay outside the address itself and non-ASCII attachment names use filename*=.
+    # The old email.mime (compat32) classes encoded the whole To header, address included,
+    # into one encoded-word, which Gmail rejects ("Invalid To header").
+    msg = EmailMessage()
     msg["To"] = to
     msg["Subject"] = subject
     if cc:
@@ -182,6 +170,14 @@ def _build_mime(to, subject, body, cc="", bcc="", attachments=None, extra_header
         msg["Bcc"] = bcc
     for key, value in (extra_headers or {}).items():
         msg[key] = value
+    msg.set_content(body)
+    for path in attachments or []:
+        ctype, encoding = mimetypes.guess_type(path)
+        if ctype is None or encoding is not None:
+            ctype = "application/octet-stream"
+        maintype, subtype = ctype.split("/", 1)
+        with open(path, "rb") as f:
+            msg.add_attachment(f.read(), maintype=maintype, subtype=subtype, filename=os.path.basename(path))
     return {"raw": base64.urlsafe_b64encode(msg.as_bytes()).decode()}
 
 
